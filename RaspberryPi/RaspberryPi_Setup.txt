@@ -1,0 +1,101 @@
+sudo apt-get update && sudo apt-get upgrade -y
+sudo update-usbids
+sudo rpi-update
+sudo reboot
+
+sudo adduser logger
+
+sudo apt-get install git -y
+sudo apt-get install libftdi-dev -y
+sudo apt-get install python-ftdi python-pip -y
+mkdir git
+cd git
+git clone https://github.com/matt2005/mmll.git
+git clone https://github.com/matt2005/ME7L.git
+cd mmll
+cp ../ME7L/ecus/example.ecu example.ecu
+
+sudo cat >/etc/udev/rules.d/99-libftdi.rules <<EOF
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="d099", GROUP="logger", MODE="0660"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", GROUP="logger", MODE="0660"
+EOF
+
+sudo apt-get install firmware-ralink -y
+sudo apt-get install hostapd isc-dhcp-server -y
+https://learn.adafruit.com/setting-up-a-raspberry-pi-as-a-wifi-access-point/install-software
+
+sudo mv /etc/dhcp/dhcpd.conf /etc/dhcp/dhcpd.conf.original
+sudo cat > /etc/dhcp/dhcpd.conf <<EOF
+ddns-update-style none;
+default-lease-time 600;
+max-lease-time 7200;
+log-facility local7;
+authoritative;
+subnet 192.168.42.0 netmask 255.255.255.0 {
+range 192.168.42.10 192.168.42.50;
+option broadcast-address 192.168.42.255;
+option routers 192.168.42.1;
+default-lease-time 600;
+max-lease-time 7200;
+option domain-name "local";
+option domain-name-servers 8.8.8.8, 8.8.4.4;
+}
+EOF
+
+sudo cat >  /etc/network/interfaces <<EOF
+auto lo
+iface lo inet loopback
+iface eth0 inet dhcp
+allow-hotplug wlan0
+#iface wlan0 inet manual
+#wpa-roam /etc/wpa_supplicant/wpa_supplicant.conf
+#iface default inet dhcp
+iface wlan0 inet static
+address 192.168.42.1
+netmask 255.255.255.0
+up iptables-restore < /etc/iptables.ipv4.nat
+EOF
+
+sudo cat > /etc/hostapd/hostapd.conf <<EOF
+interface=wlan0
+driver=nl80211
+ssid=Pi_AP
+hw_mode=g
+channel=6
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=Raspberry
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+EOF
+
+sudo cp /etc/default/hostapd /etc/default/hostapd.original
+sudo cat > /etc/default/hostapd <<EOF
+DAEMON_CONF="/etc/hostapd/hostapd.conf"
+EOF
+
+sudo sed -i 's/#net.ipv4.ip_forward/net.ipv4.ip_forward/g' /etc/sysctl.conf
+sudo sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
+
+sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+sudo iptables -A FORWARD -i eth0 -o wlan0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+sudo iptables -A FORWARD -i wlan0 -o eth0 -j ACCEPT
+
+sudo sh -c "iptables-save > /etc/iptables.ipv4.nat"
+
+sudo service hostapd start 
+sudo service isc-dhcp-server start
+sudo update-rc.d hostapd enable 
+sudo update-rc.d isc-dhcp-server enable
+
+sudo mv /usr/share/dbus-1/system-services/fi.epitest.hostap.WPASupplicant.service ~/
+
+sudo -s
+cd /tmp
+wget https://dl.dropboxusercontent.com/u/67643651/mt7601_3.18.7_755.tar.gz
+sudo tar xf mt7601_3.18.7_755.tar.gz -C /
+sudo depmod 3.18.7+
+sudo reboot
