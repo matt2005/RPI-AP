@@ -4,7 +4,7 @@ I bought an USB WIFI dongle, on ebay, to use with the Raspberry Pi. I thought th
 
 Bus 001 Device 005: ID 148f:7601 Ralink Technology, Corp.
 All this is for Raspian and I have gathered all the steps needed here.
-
+  
 Driver
 The driver is available at their web side download page here. Find the one called "MT7601U USB". I have the file mirrored here.
 
